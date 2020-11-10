@@ -55,6 +55,8 @@ uint8_t MessageLength = 0; // Zawiera dlugosc wysylanej wiadomosci
 uint8_t ReceivedData[100]; // Tablica przechowujaca odebrane dane
 uint8_t ReceivedDataFlag = 0; // Flaga informujaca o odebraniu danych
 
+double g_azimuth, g_altitude, g_distance;
+
 volatile uint16_t pulse_count_azimuth; // Licznik impulsow
 volatile uint16_t positions_azimuth; // Licznik przekreconych pozycji
 
@@ -127,6 +129,9 @@ void send_json(int32_t Encoder1, int32_t Encoder2){
 
 void send_json_ada(double azimuth, double altitude, double distance){
 	printf("{\"azimuth\":%f,\"altitude\":%f,\"distance\":%f}\r\n", azimuth, altitude, distance);
+	g_azimuth = azimuth;
+	g_altitude = altitude;
+	g_distance = distance;
 }
 
 void calc_azimuth(double Latitude1, double Longitude1, double Height1, double Latitude2, double Longitude2, double Height2, double *azimuth, double *distance, double *altitude){ //Latitude = φ Longitude = λ
@@ -214,6 +219,12 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
+
+  HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+  HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+
   pid_init(&pid_azimuth, 150.0f, 50.0f, 0.005f, 10, 1);
   pid_azimuth.p_max = pid_scale(&pid_azimuth, 4095);
   pid_azimuth.p_min = pid_scale(&pid_azimuth, -4095);
@@ -239,13 +250,25 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+      HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+
+		HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MOTOR12_GPIO_Port, MOTOR12_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
   while (1)
   {
 
 	  if(ReceivedDataFlag == 1){
 	  	ReceivedDataFlag = 0;
 	  	//parse();
-	  	parse_loc();
+	  	if(ReceivedData[0] == 'S') parse();
+	  	else parse_loc();
+
 	  }
 	  HAL_Delay(100);
     /* USER CODE END WHILE */
