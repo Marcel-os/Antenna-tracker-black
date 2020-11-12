@@ -34,6 +34,13 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef struct {
+	double Latitude;
+	double Longitude;
+	double Height;
+	uint32_t timestamp;
+ }position;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -65,6 +72,11 @@ volatile uint16_t positions_height; // Licznik przekreconych pozycji
 
 cpid_t pid_azimuth;
 cpid_t pid_height;
+
+//inicjalizacja dane pozycji - rondo Regana Wrocław
+position home_position = { 51.111534, 17.060227, 117.09};
+position actual_position = { 51.111534, 17.060227, 117.09};
+position old_position = { 51.111534, 17.060227, 117.09};
 
 /* USER CODE END PV */
 
@@ -134,6 +146,14 @@ void send_json_ada(double azimuth, double altitude, double distance){
 	g_distance = distance;
 }
 
+void send_json_error( char *error){
+	printf("{\"error\":\"%s\"}\r\n", error);
+}
+
+void send_json_position(position actual, position predicted){
+	printf("{\"PositionActual\":{\"Lat\":%f,\"Lon\":%f,\"Height\":%f},\"PositionPredicted\":{\"Lat\":%f,\"Lon\":%f,\"Height\":%f}}\r\n", actual.Latitude, actual.Longitude, actual.Height, predicted.Latitude, predicted.Longitude, predicted.Height );
+}
+
 void calc_azimuth(double Latitude1, double Longitude1, double Height1, double Latitude2, double Longitude2, double Height2, double *azimuth, double *distance, double *altitude){ //Latitude = φ Longitude = λ
 
 	Latitude1 *= (M_PI/180);
@@ -163,6 +183,33 @@ void calc_azimuth(double Latitude1, double Longitude1, double Height1, double La
 	*altitude = acos(sphere_distance/ *distance)  * (180/M_PI);
 }
 
+void calc_azimuth_obj(position tracker, position object, double *azimuth, double *distance, double *altitude){ //Latitude = φ Longitude = λ
+
+	tracker.Latitude *= (M_PI/180);
+	tracker.Longitude *= (M_PI/180);
+	object.Latitude *= (M_PI/180);
+	object.Longitude *= (M_PI/180);
+	tracker.Height /= 1000;
+	object.Height /= 1000;
+
+	double delta_Latitude = (object.Latitude - tracker.Latitude);
+	double delta_Longitude = (object.Longitude - tracker.Longitude);
+	double delta_Height = object.Height - tracker.Height;
+
+	//θ = atan2 [(sin Δλ * cos φ₂), (cos φ�? * sin φ₂ �?� sin φ�? * cos φ₂ *  cos Δλ)]
+	*azimuth = atan2( ( sin(delta_Longitude) * cos(object.Latitude) ) , ( (cos(tracker.Latitude) * sin(object.Latitude)) - (sin(tracker.Latitude) * cos(object.Latitude) * cos(delta_Longitude)) ) ) * (180/ M_PI );
+	//Haversine formula:
+	//a = sin²(Δφ/2) + cos φ�? * cos φ₂ * sin²(Δλ/2)
+	double a = pow( sin(delta_Latitude/2), 2.0 ) + (cos(tracker.Latitude) * cos(object.Latitude) * pow(sin(delta_Longitude/2), 2.0));
+	//c = 2 * atan2 [�?�a, �?�(1�?�a)]
+	double c = 2.0 * atan2( sqrt(a), sqrt(1.0-a));
+	//d = R * c, R = 6371 km - radius of the Earth
+	double sphere_distance = 6371.0 * c; // in km
+
+	*distance = sqrt( pow(sphere_distance, 2.0) + pow(delta_Height, 2.0));// in km
+	*altitude = acos(sphere_distance/ *distance)  * (180/M_PI);
+}
+
 void parse_loc(){
   	char header[1];
   	double Latitude1, Longitude1, Height1, Latitude2, Longitude2, Height2, azimuth, distance, altitude;
@@ -172,9 +219,31 @@ void parse_loc(){
   	{
   		calc_azimuth( Latitude1,  Longitude1,  Height1,  Latitude2,  Longitude2,  Height2,  &azimuth,  &distance,  &altitude);
   		send_json_ada( azimuth, altitude, distance);
-
   	}else printf("error - zle dane \r\n");
+}
 
+void parse_home_pos(){
+  	char header[1];
+  	sscanf(ReceivedData, "%s %lf %lf %lf", &header, &home_position.Latitude, &home_position.Longitude, &home_position.Height);
+}
+
+void parse_actual_pos(){
+  	char header[1];
+  	double lat, lon,height;
+  	sscanf(ReceivedData, "%s %lf %lf %lf", &header, &actual_position.Latitude, &actual_position.Longitude, &actual_position.Height);
+//  	actual_position.Latitude = lat;
+//	actual_position.Longitude = lon;
+//	actual_position.Height = height;
+//	printf("data: %lf,%lf,%lf", lat, lon, height);
+}
+
+//very simple prediction by linear approximation
+position simple_predict(position actual, position old){
+	position predicted;
+	predicted.Latitude = 2.0 * actual.Latitude - old.Latitude;
+	predicted.Longitude = 2.0 * actual.Longitude - old.Longitude;
+	predicted.Height = 2.0 * actual.Height - old.Height;
+	return predicted;
 }
 
 
@@ -192,6 +261,7 @@ void parse_loc(){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+
 
   /* USER CODE END 1 */
 
@@ -267,8 +337,17 @@ int main(void)
 	  	ReceivedDataFlag = 0;
 	  	//parse();
 	  	if(ReceivedData[0] == 'S') parse();
-	  	else parse_loc();
-
+	  	else if (ReceivedData[0] == 'G') parse_loc();
+	  	else if (ReceivedData[0] == 'H') parse_home_pos();
+	  	else if (ReceivedData[0] == 'A'){
+	  		parse_actual_pos();
+		  	send_json_position( actual_position , simple_predict( actual_position, old_position ) );
+		  	//HAL_Delay(5000);
+		  	old_position.Latitude = actual_position.Latitude;
+		  	old_position.Longitude = actual_position.Longitude;
+		  	old_position.Height = actual_position.Height;
+	  	}
+	  	else send_json_error( "Bad data frame construction!");
 	  }
 	  HAL_Delay(100);
     /* USER CODE END WHILE */
