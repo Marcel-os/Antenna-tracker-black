@@ -20,6 +20,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
+#include "dma.h"
 #include "tim.h"
 #include "usb_device.h"
 #include "gpio.h"
@@ -72,6 +74,8 @@ volatile uint16_t positions_height; // Licznik przekreconych pozycji
 
 cpid_t pid_azimuth;
 cpid_t pid_height;
+
+uint16_t feedback[2];
 
 //inicjalizacja dane pozycji - rondo Regana Wrocław
 position home_position = { 51.111534, 17.060227, 117.09};
@@ -283,10 +287,12 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USB_DEVICE_Init();
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
@@ -294,6 +300,8 @@ int main(void)
 
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+
+  HAL_ADC_Start_DMA(&hadc1, feedback, 2);
 
   pid_init(&pid_azimuth, 150.0f, 50.0f, 0.005f, 10, 1);
   pid_azimuth.p_max = pid_scale(&pid_azimuth, 4095);
@@ -332,6 +340,8 @@ int main(void)
 		HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
   while (1)
   {
+
+	  send_json((int)feedback[0], (int)feedback[1] );
 
 	  if(ReceivedDataFlag == 1){
 	  	ReceivedDataFlag = 0;
