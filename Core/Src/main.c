@@ -23,12 +23,14 @@
 #include "adc.h"
 #include "dma.h"
 #include "tim.h"
+#include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "pid.h"
+#include "GPS.h"
 #include <math.h>
 
 /* USER CODE END Includes */
@@ -87,6 +89,15 @@ position old_position = { 51.111534, 17.060227, 117.09};
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+ GPS_CallBack();
+ //HAL_UART_Transmit_IT(&huart1, "RAMKA", sizeof("RAMKA"));
+// HAL_UART_Transmit_IT(&huart1, &Received, 1); // Rozpoczecie nadawania danych z wykorzystaniem przerwan
+// HAL_UART_Receive_IT(&huart3, &Received, 1); // Ponowne włączenie nasłuchiwania
+
+ //		GPS.GPGGA.LatitudeDecimal, GPS.GPGGA.LongitudeDecimal, GPS.GPGGA.MSL_Altitude
+}
 
 int _write(int file, char *ptr, int len){
     //HAL_UART_Transmit(&huart2, (uint8_t*)ptr, len, 50);
@@ -293,6 +304,7 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_ADC1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
