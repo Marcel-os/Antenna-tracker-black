@@ -66,10 +66,6 @@ void Error_Handler(void);
 #define MOTOR12_GPIO_Port GPIOB
 #define MOTOR11_Pin GPIO_PIN_15
 #define MOTOR11_GPIO_Port GPIOB
-#define PWM1_Pin GPIO_PIN_8
-#define PWM1_GPIO_Port GPIOA
-#define PWM2_Pin GPIO_PIN_9
-#define PWM2_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

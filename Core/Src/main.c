@@ -143,7 +143,15 @@ void parse(){
   			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
   			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
   		}
-  		send_json(PWM1, PWM2);
+  		//send_json(PWM1, PWM2);
+  		int a = 0, b = 0, c = 0, d = 0;
+  		if(HAL_GPIO_ReadPin(MOTOR11_GPIO_Port, MOTOR11_Pin) == GPIO_PIN_SET) a = 1;
+  		if(HAL_GPIO_ReadPin(MOTOR12_GPIO_Port, MOTOR12_Pin) == GPIO_PIN_SET) b = 1;
+  		if(HAL_GPIO_ReadPin(MOTOR21_GPIO_Port, MOTOR21_Pin) == GPIO_PIN_SET) c = 1;
+  		if(HAL_GPIO_ReadPin(MOTOR22_GPIO_Port, MOTOR22_Pin) == GPIO_PIN_SET) d = 1;
+
+  		printf("MOTOR11:%d MOTOR12:%d MOTOR21:%d MOTOR22:%d PWM1:%d PWM2:%d\r\n",a,b,c,d, PWM1, PWM2 );
+  		//send_json_error(message);
 
 //	  	sprintf(DataToSend, "%d %d %d %d \r\n", PWM1, PWM2, DIR1, DIR2);
 //	  	printf(DataToSend);
@@ -305,6 +313,7 @@ int main(void)
   MX_TIM3_Init();
   MX_ADC1_Init();
   MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
@@ -353,7 +362,19 @@ int main(void)
   while (1)
   {
 
-	  send_json((int)feedback[0], (int)feedback[1] );
+	  //send_json((int)feedback[0], (int)feedback[1] );
+
+	  while( feedback[0] > 3000 || feedback[0] < 1000 || feedback[1] > 3000 || feedback[1] < 1000 ){
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0 );
+			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0 );
+			HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(MOTOR12_GPIO_Port, MOTOR12_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
+			HAL_Delay(100);
+			send_json((int)feedback[0], (int)feedback[1] );
+			send_json_error("Poza zakresem");
+	  }
 
 	  if(ReceivedDataFlag == 1){
 	  	ReceivedDataFlag = 0;
