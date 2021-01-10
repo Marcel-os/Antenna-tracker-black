@@ -69,15 +69,15 @@ uint8_t ReceivedDataFlag = 0; // Flaga informujaca o odebraniu danych
 double g_azimuth, g_altitude, g_distance;
 
 volatile uint16_t pulse_count_azimuth; // Licznik impulsow
-volatile uint16_t positions_azimuth; // Licznik przekreconych pozycji
+volatile double positions_azimuth; // Licznik przekreconych pozycji
 
 volatile uint16_t pulse_count_height; // Licznik impulsow
-volatile uint16_t positions_height; // Licznik przekreconych pozycji
+volatile double positions_height; // Licznik przekreconych pozycji
 
 cpid_t pid_azimuth;
 cpid_t pid_height;
 
-uint16_t feedback[2];
+//uint16_t feedback[2];
 
 //inicjalizacja dane pozycji - rondo Regana Wrocław
 position home_position = { 51.111534, 17.060227, 117.09};
@@ -109,11 +109,12 @@ int _write(int file, char *ptr, int len){
 void parse(){
   	char header[1];
   	int32_t PWM1, PWM2, DIR1, DIR2;
+  	//PWM1 - height, PWM2 - azimuth
 
   	sscanf(ReceivedData, "%s %d %d %d %d", &header, &PWM1, &PWM2, &DIR1, &DIR2);
   	if( header[0] == 'S' && PWM1 >= 0 && PWM1 < 65535 && PWM2 >= 0 && PWM2 < 65535 && (DIR1 == 1 || DIR1 == 0) && (DIR2 == 1 || DIR2 == 0) )
   	{
-  		send_json(PWM1, PWM2);
+  		//send_json(PWM1, PWM2);
   		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, PWM1 );
   		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, PWM2 );
 
@@ -322,7 +323,7 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
 
-  HAL_ADC_Start_DMA(&hadc1, feedback, 2);
+//  HAL_ADC_Start_DMA(&hadc1, feedback, 2);
 
   pid_init(&pid_azimuth, 150.0f, 50.0f, 0.005f, 10, 1);
   pid_azimuth.p_max = pid_scale(&pid_azimuth, 4095);
@@ -363,8 +364,16 @@ int main(void)
   {
 
 	  //send_json((int)feedback[0], (int)feedback[1] );
+	  pulse_count_azimuth = TIM2->CNT; // przepisanie wartosci z rejestru timera
+	  positions_azimuth = pulse_count_azimuth/8.889; // zeskalowanie impulsow do stopni
 
-	  while( feedback[0] > 3000 || feedback[0] < 1000 || feedback[1] > 3000 || feedback[1] < 1000 ){
+	  pulse_count_height = TIM3->CNT; // przepisanie wartosci z rejestru timera
+	  positions_height = pulse_count_height/6.889; // zeskalowanie impulsow do stopni
+
+	  send_json( positions_height, positions_azimuth );
+
+
+	  while( positions_azimuth > 310 || positions_azimuth < 50 || positions_height > 310 || positions_height < 50 ){
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0 );
 			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0 );
 			HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_RESET);
@@ -372,7 +381,7 @@ int main(void)
 			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
 			HAL_Delay(100);
-			send_json((int)feedback[0], (int)feedback[1] );
+			//send_json((int)feedback[0], (int)feedback[1] );
 			send_json_error("Poza zakresem");
 	  }
 
