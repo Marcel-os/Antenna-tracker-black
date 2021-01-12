@@ -84,6 +84,11 @@ position home_position = { 51.111534, 17.060227, 117.09};
 position actual_position = { 51.111534, 17.060227, 117.09};
 position old_position = { 51.111534, 17.060227, 117.09};
 
+int setpoint_azimuth = 180;
+int setpoint_height = 180;
+int pwm_control_height = 0;
+int pwm_control_azimuth = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -372,18 +377,21 @@ int main(void)
 
 	  send_json( positions_height, positions_azimuth );
 
+	  pwm_control_height = pid_calc(&pid_height, (int)positions_height, setpoint_height)/10;
 
-	  while( positions_azimuth > 310 || positions_azimuth < 50 || positions_height > 310 || positions_height < 50 ){
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0 );
-			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0 );
-			HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(MOTOR12_GPIO_Port, MOTOR12_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
-			HAL_Delay(100);
-			//send_json((int)feedback[0], (int)feedback[1] );
-			send_json_error("Poza zakresem");
-	  }
+
+
+//	  while( positions_azimuth > 310 || positions_azimuth < 50 || positions_height > 310 || positions_height < 50 ){
+//			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0 );
+//			__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0 );
+//			HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_RESET);
+//			HAL_GPIO_WritePin(MOTOR12_GPIO_Port, MOTOR12_Pin, GPIO_PIN_RESET);
+//			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
+//			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
+//			HAL_Delay(100);
+//			//send_json((int)feedback[0], (int)feedback[1] );
+//			send_json_error("Poza zakresem");
+//	  }
 
 	  if(ReceivedDataFlag == 1){
 	  	ReceivedDataFlag = 0;
