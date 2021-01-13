@@ -68,11 +68,13 @@ uint8_t ReceivedDataFlag = 0; // Flaga informujaca o odebraniu danych
 
 double g_azimuth, g_altitude, g_distance;
 
-volatile uint16_t pulse_count_azimuth; // Licznik impulsow
+volatile uint16_t pulse_count_azimuth = 1600; // Licznik impulsow
 volatile double positions_azimuth; // Licznik przekreconych pozycji
 
-volatile uint16_t pulse_count_height; // Licznik impulsow
+volatile uint16_t pulse_count_height = 1240; // Licznik impulsow
 volatile double positions_height; // Licznik przekreconych pozycji
+
+volatile int flaga1ms = 0;
 
 cpid_t pid_azimuth;
 cpid_t pid_height;
@@ -89,6 +91,15 @@ int setpoint_height = 180;
 int pwm_control_height = 0;
 int pwm_control_azimuth = 0;
 
+int pwm_control_azimuth_abs = 0;
+int pwm_control_height_abs = 0;
+
+int pwm_dir_height = 0;
+int pwm_dir_azimuth = 0;
+
+int timer_val = 0;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -102,6 +113,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 // HAL_UART_Receive_IT(&huart3, &Received, 1); // Ponowne włączenie nasłuchiwania
 
  //		GPS.GPGGA.LatitudeDecimal, GPS.GPGGA.LongitudeDecimal, GPS.GPGGA.MSL_Altitude
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+	if(htim == &htim4){
+			//obsługa przerwania co 1ms
+		flaga1ms = 1;
+	}
 }
 
 int _write(int file, char *ptr, int len){
@@ -320,13 +338,19 @@ int main(void)
   MX_ADC1_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
 
+  TIM2->CNT = 1600;
+  TIM3->CNT = 1240;
+
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
+
+  HAL_TIM_Base_Start_IT(&htim4);
 
 //  HAL_ADC_Start_DMA(&hadc1, feedback, 2);
 
@@ -340,7 +364,7 @@ int main(void)
   pid_azimuth.total_max = pid_scale(&pid_azimuth, 4095);
   pid_azimuth.total_min = pid_scale(&pid_azimuth, 0);
 
-  pid_init(&pid_height, 150.0f, 50.0f, 0.005f, 10, 1);
+  pid_init(&pid_height, 1.0f, 0.0f, 0.0f, 10, 1);//1ms - okres
   pid_height.p_max = pid_scale(&pid_height, 4095);
   pid_height.p_min = pid_scale(&pid_height, -4095);
   pid_height.i_max = pid_scale(&pid_height, 4095);
@@ -367,17 +391,27 @@ int main(void)
 		HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
   while (1)
   {
+	  timer_val = __HAL_TIM_GET_COUNTER(&htim4);
 
 	  //send_json((int)feedback[0], (int)feedback[1] );
 	  pulse_count_azimuth = TIM2->CNT; // przepisanie wartosci z rejestru timera
-	  positions_azimuth = pulse_count_azimuth/8.889; // zeskalowanie impulsow do stopni
+	  positions_azimuth = pulse_count_azimuth/8.88889; // zeskalowanie impulsow do stopni
 
 	  pulse_count_height = TIM3->CNT; // przepisanie wartosci z rejestru timera
-	  positions_height = pulse_count_height/6.889; // zeskalowanie impulsow do stopni
+	  positions_height = pulse_count_height/6.88889; // zeskalowanie impulsow do stopni
 
-	  send_json( positions_height, positions_azimuth );
+	  	  if( flaga1ms == 1 ){
+	  		  flaga1ms = 0;
+	  		  send_json( positions_height, positions_azimuth );
+	  		  pwm_control_height = pid_calc(&pid_height, (int)positions_height, setpoint_height);
+	  		  if( pwm_control_height >= 0 ) pwm_dir_height = 1;
+	  		  else pwm_dir_height = 0;
+	  		  pwm_control_height_abs = abs(pwm_control_height);
+	  	  }
 
-	  pwm_control_height = pid_calc(&pid_height, (int)positions_height, setpoint_height)/10;
+//	  send_json( positions_height, positions_azimuth );
+//
+//	  pwm_control_height = pid_calc(&pid_height, (int)positions_height, setpoint_height)/10;
 
 
 
@@ -410,6 +444,7 @@ int main(void)
 	  	else send_json_error( "Bad data frame construction!");
 	  }
 	  HAL_Delay(100);
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
