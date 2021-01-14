@@ -75,6 +75,7 @@ volatile uint16_t pulse_count_height = 1240; // Licznik impulsow
 volatile double positions_height; // Licznik przekreconych pozycji
 
 volatile int flaga1ms = 0;
+volatile int flaga1s = 0;
 
 cpid_t pid_azimuth;
 cpid_t pid_height;
@@ -119,6 +120,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
 	if(htim == &htim4){
 			//obsługa przerwania co 1ms
 		flaga1ms = 1;
+	}
+	if(htim == &htim5){
+			//obsługa przerwania co 1ms
+		flaga1s = 1;
 	}
 }
 
@@ -339,6 +344,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_TIM4_Init();
+  MX_TIM5_Init();
   /* USER CODE BEGIN 2 */
 
   HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
@@ -351,10 +357,11 @@ int main(void)
   HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_ALL);
 
   HAL_TIM_Base_Start_IT(&htim4);
+  HAL_TIM_Base_Start_IT(&htim5);
 
 //  HAL_ADC_Start_DMA(&hadc1, feedback, 2);
 
-  pid_init(&pid_azimuth, 150.0f, 50.0f, 0.005f, 10, 1);
+  pid_init(&pid_azimuth, 80.0f, 0.0f, 50.0f, 10, 1);
   pid_azimuth.p_max = pid_scale(&pid_azimuth, 4095);
   pid_azimuth.p_min = pid_scale(&pid_azimuth, -4095);
   pid_azimuth.i_max = pid_scale(&pid_azimuth, 4095);
@@ -362,9 +369,9 @@ int main(void)
   pid_azimuth.d_max = pid_scale(&pid_azimuth, 4095);
   pid_azimuth.d_min = pid_scale(&pid_azimuth, -4095);
   pid_azimuth.total_max = pid_scale(&pid_azimuth, 4095);
-  pid_azimuth.total_min = pid_scale(&pid_azimuth, 0);
+  pid_azimuth.total_min = pid_scale(&pid_azimuth, -4095);
 
-  pid_init(&pid_height, 1.0f, 0.0f, 0.0f, 10, 1);//1ms - okres
+  pid_init(&pid_height, 60.0f, 0.0f, 30.0f, 10, 1);//1ms - okres
   pid_height.p_max = pid_scale(&pid_height, 4095);
   pid_height.p_min = pid_scale(&pid_height, -4095);
   pid_height.i_max = pid_scale(&pid_height, 4095);
@@ -372,7 +379,7 @@ int main(void)
   pid_height.d_max = pid_scale(&pid_height, 4095);
   pid_height.d_min = pid_scale(&pid_height, -4095);
   pid_height.total_max = pid_scale(&pid_height, 4095);
-  pid_height.total_min = pid_scale(&pid_height, 0);
+  pid_height.total_min = pid_scale(&pid_height, -4095);
 
 
   /* USER CODE END 2 */
@@ -400,14 +407,57 @@ int main(void)
 	  pulse_count_height = TIM3->CNT; // przepisanie wartosci z rejestru timera
 	  positions_height = pulse_count_height/6.88889; // zeskalowanie impulsow do stopni
 
+	  //send_json( positions_height, positions_azimuth );
+
 	  	  if( flaga1ms == 1 ){
 	  		  flaga1ms = 0;
-	  		  send_json( positions_height, positions_azimuth );
-	  		  pwm_control_height = pid_calc(&pid_height, (int)positions_height, setpoint_height);
-	  		  if( pwm_control_height >= 0 ) pwm_dir_height = 1;
-	  		  else pwm_dir_height = 0;
-	  		  pwm_control_height_abs = abs(pwm_control_height);
+
+				  pwm_control_height = pid_calc(&pid_height, (int)positions_height, setpoint_height);
+				  if( pwm_control_height >= 0 ) pwm_dir_height = 1;
+				  else pwm_dir_height = 0;
+				  pwm_control_height_abs = abs(pwm_control_height);
+
+					__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwm_control_height_abs );
+
+					if(pwm_dir_height == 1){
+						HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_SET);
+						HAL_GPIO_WritePin(MOTOR12_GPIO_Port, MOTOR12_Pin, GPIO_PIN_RESET);
+					}
+
+					if(pwm_dir_height == 0){
+						HAL_GPIO_WritePin(MOTOR11_GPIO_Port, MOTOR11_Pin, GPIO_PIN_RESET);
+						HAL_GPIO_WritePin(MOTOR12_GPIO_Port, MOTOR12_Pin, GPIO_PIN_SET);
+					}
+
+		  		  pwm_control_azimuth = pid_calc(&pid_azimuth, (int)positions_azimuth, setpoint_azimuth);
+		  		  if( pwm_control_azimuth >= 0 ) pwm_dir_azimuth = 1;
+		  		  else pwm_dir_azimuth = 0;
+		  		  pwm_control_azimuth_abs = abs(pwm_control_azimuth);
+
+		    		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwm_control_azimuth_abs );
+
+		    		if(pwm_dir_azimuth == 1){
+		      			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_SET);
+		      			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_RESET);
+		    		}
+
+		    		if(pwm_dir_azimuth == 0){
+		      			HAL_GPIO_WritePin(MOTOR21_GPIO_Port, MOTOR21_Pin, GPIO_PIN_RESET);
+		      			HAL_GPIO_WritePin(MOTOR22_GPIO_Port, MOTOR22_Pin, GPIO_PIN_SET);
+		    		}
+
+
+
+
 	  	  }
+
+	  	if( flaga1s == 1 ){
+	  		flaga1s = 0;
+	  		if(setpoint_height == 180) setpoint_height = 150;
+	  		else setpoint_height = 180;
+	  		if(setpoint_azimuth == 180) setpoint_azimuth = 150;
+	  		else setpoint_azimuth = 180;
+	  	}
 
 //	  send_json( positions_height, positions_azimuth );
 //
@@ -427,23 +477,23 @@ int main(void)
 //			send_json_error("Poza zakresem");
 //	  }
 
-	  if(ReceivedDataFlag == 1){
-	  	ReceivedDataFlag = 0;
-	  	//parse();
-	  	if(ReceivedData[0] == 'S') parse();
-	  	else if (ReceivedData[0] == 'G') parse_loc();
-	  	else if (ReceivedData[0] == 'H') parse_home_pos();
-	  	else if (ReceivedData[0] == 'A'){
-	  		parse_actual_pos();
-		  	send_json_position( actual_position , simple_predict( actual_position, old_position ) );
-		  	//HAL_Delay(5000);
-		  	old_position.Latitude = actual_position.Latitude;
-		  	old_position.Longitude = actual_position.Longitude;
-		  	old_position.Height = actual_position.Height;
-	  	}
-	  	else send_json_error( "Bad data frame construction!");
-	  }
-	  HAL_Delay(100);
+//	  if(ReceivedDataFlag == 1){
+//	  	ReceivedDataFlag = 0;
+//	  	//parse();
+//	  	if(ReceivedData[0] == 'S') parse();
+//	  	else if (ReceivedData[0] == 'G') parse_loc();
+//	  	else if (ReceivedData[0] == 'H') parse_home_pos();
+//	  	else if (ReceivedData[0] == 'A'){
+//	  		parse_actual_pos();
+//		  	send_json_position( actual_position , simple_predict( actual_position, old_position ) );
+//		  	//HAL_Delay(5000);
+//		  	old_position.Latitude = actual_position.Latitude;
+//		  	old_position.Longitude = actual_position.Longitude;
+//		  	old_position.Height = actual_position.Height;
+//	  	}
+//	  	else send_json_error( "Bad data frame construction!");
+//	  }
+	  //HAL_Delay(100);
 
     /* USER CODE END WHILE */
 
